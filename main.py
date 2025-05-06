@@ -2,9 +2,17 @@ import tkinter as tk
 from tkinter import scrolledtext
 import httpx
 import json
+from dotenv import load_dotenv
+import os
+
+# Chargement des variables d'environnement
+load_dotenv()
 
 # Configuration de l'API
-API_URL = "https://3de0f3c3-b58e-40c8-a5dc-72e2bd3be1a6.pub.instances.scw.cloud/gpt/v1/chat/completions"
+API_URL = os.getenv("URL")
+if not API_URL:
+    raise ValueError("L'URL de l'API n'est pas définie dans le fichier .env")
+
 headers = {
     "accept": "application/json",
     "Content-Type": "application/json"
