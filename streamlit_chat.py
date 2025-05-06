@@ -158,35 +158,46 @@ if prompt := st.chat_input("Entrez votre message ici..."):
             "use_context": len(st.session_state.uploaded_files) > 0,
             "context_filter": {
                 "collection": "chat_documents"
-            } if st.session_state.uploaded_files else None
+            } if st.session_state.uploaded_files else None,
+            "stream": True  # Activation du streaming
         }
 
-        # Envoi de la requête
+        # Création d'un conteneur pour le message de l'assistant
+        assistant_message = st.chat_message("assistant")
+        message_placeholder = assistant_message.empty()
+        full_response = ""
+
+        # Envoi de la requête avec streaming
         with httpx.Client(timeout=30.0) as client:
-            response = client.post(f"{API_URL}/v1/chat/completions", headers=headers, json=data)
-            response.raise_for_status()
-            
-            # Traitement de la réponse
-            result = response.json()
-            
-            # Extraction du texte de la réponse
-            if "content" in result and isinstance(result["content"], list):
-                # Chercher le bloc de type "text" dans la réponse
-                text_content = None
-                for content_block in result["content"]:
-                    if content_block.get("type") == "text":
-                        text_content = content_block.get("text")
-                        break
+            with client.stream("POST", f"{API_URL}/v1/chat/completions", json=data, headers=headers) as response:
+                response.raise_for_status()
                 
-                if text_content:
-                    # Ajout de la réponse à l'historique
-                    st.session_state.messages.append({"role": "assistant", "content": text_content})
-                    with st.chat_message("assistant"):
-                        st.markdown(text_content)
-                else:
-                    st.error("Aucun contenu textuel trouvé dans la réponse")
-            else:
-                st.error(f"Format de réponse inattendu. Réponse reçue: {json.dumps(result, indent=2)}")
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            # La ligne est déjà en format string
+                            if line.startswith('data: '):
+                                json_data = json.loads(line[6:])
+                                
+                                # Gérer les différents types d'événements
+                                if json_data.get('type') == 'content_block_delta':
+                                    delta = json_data.get('delta', {})
+                                    if delta.get('type') == 'text_delta':
+                                        text = delta.get('text', '')
+                                        full_response += text
+                                        message_placeholder.markdown(full_response + "▌")
+                                
+                        except json.JSONDecodeError as e:
+                            continue
+                        except Exception as e:
+                            continue
+
+        # Mise à jour finale du message
+        if full_response:
+            message_placeholder.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+        else:
+            st.error("Aucune réponse n'a été reçue de l'API")
 
     except Exception as e:
         st.error(f"Erreur: {str(e)}")
