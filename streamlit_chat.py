@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 import os
 import tempfile
 import contextlib
+import httpx
+import json
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -12,6 +14,11 @@ API_URL = os.getenv("URL")
 if not API_URL:
     st.error("L'URL de l'API n'est pas définie dans le fichier .env")
     st.stop()
+
+headers = {
+    "accept": "application/json",
+    "Content-Type": "application/json"
+}
 
 # Configuration de la page Streamlit
 st.set_page_config(page_title="Chat avec Assistant IA", page_icon="🤖")
