@@ -1,13 +1,21 @@
-# Chat avec Zylon AI
+# Chatbot Zylon AI avec Streamlit
 
-Une application de chat simple utilisant l'API Zylon AI avec une interface graphique Tkinter.
+Une interface de chat moderne et interactive utilisant Streamlit pour communiquer avec l'API Zylon AI.
 
-## Prérequis
+## 🚀 Fonctionnalités
+
+- Interface utilisateur moderne et responsive
+- Historique des conversations
+- Support du formatage Markdown
+- Gestion des erreurs et des timeouts
+- Interface intuitive de type chat
+
+## 📋 Prérequis
 
 - Python 3.7 ou supérieur
 - pip (gestionnaire de paquets Python)
 
-## Installation
+## 🔧 Installation
 
 1. Clonez ce dépôt :
 ```bash
@@ -15,57 +23,48 @@ git clone [URL_DU_REPO]
 cd [NOM_DU_DOSSIER]
 ```
 
-2. Créez un environnement virtuel (recommandé) :
-```bash
-python -m venv venv
-```
-
-3. Activez l'environnement virtuel :
-- Windows :
-```bash
-venv\Scripts\activate
-```
-- Linux/Mac :
-```bash
-source venv/bin/activate
-```
-
-4. Installez les dépendances :
+2. Installez les dépendances :
 ```bash
 pip install -r requirements.txt
 ```
 
-5. Créez un fichier `.env` à la racine du projet avec votre URL d'API :
+3. Créez un fichier `.env` à la racine du projet et ajoutez votre URL d'API :
 ```
 URL=votre_url_api_ici
 ```
 
-## Utilisation
+## 🎮 Utilisation
 
-1. Lancez l'application :
+Pour lancer l'application :
+
 ```bash
-python main.py
+streamlit run streamlit_chat.py
 ```
 
-2. Une fenêtre de chat s'ouvrira où vous pourrez :
-   - Écrire votre message dans le champ de texte
-   - Cliquer sur "Envoyer" ou appuyer sur Entrée pour envoyer votre message
-   - Voir la conversation dans la zone de texte principale
+L'application s'ouvrira automatiquement dans votre navigateur par défaut.
 
-## Structure du projet
+## 📦 Dépendances
 
-- `main.py` : Application principale
-- `requirements.txt` : Liste des dépendances
-- `.env` : Configuration (non versionné)
-- `.gitignore` : Fichiers à ignorer par Git
+- streamlit==1.32.0
+- httpx==0.27.0
+- python-dotenv==1.0.1
 
-## Sécurité
+## 🔍 Structure du Projet
 
-- Le fichier `.env` n'est pas versionné pour protéger vos informations sensibles
-- Assurez-vous de ne jamais partager votre fichier `.env` ou votre URL d'API
+```
+.
+├── streamlit_chat.py    # Application principale
+├── requirements.txt     # Dépendances du projet
+├── .env                # Variables d'environnement
+└── README.md          # Documentation
+```
 
-## Dépendances principales
+## ⚠️ Notes
 
-- `httpx` : Pour les requêtes HTTP
-- `python-dotenv` : Pour la gestion des variables d'environnement
-- `tkinter` : Pour l'interface graphique (inclus dans Python) 
+- Assurez-vous d'avoir une connexion Internet active pour communiquer avec l'API
+- Le fichier `.env` ne doit pas être partagé ou commité dans le dépôt
+- Les timeouts sont configurés à 30 secondes par défaut
+
+## 🤝 Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou à soumettre une pull request. 
