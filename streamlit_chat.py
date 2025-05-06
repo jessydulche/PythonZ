@@ -1,8 +1,7 @@
 import streamlit as st
-import httpx
-import json
 from dotenv import load_dotenv
 import os
+from pgpt_python.client import PrivateGPTApi
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -13,14 +12,20 @@ if not API_URL:
     st.error("L'URL de l'API n'est pas définie dans le fichier .env")
     st.stop()
 
-headers = {
-    "accept": "application/json",
-    "Content-Type": "application/json"
-}
-
 # Configuration de la page Streamlit
 st.set_page_config(page_title="Chat avec Zylon AI", page_icon="🤖")
 st.title("Chat avec Zylon AI")
+
+# Affichage de l'URL de l'API (pour le débogage)
+st.sidebar.write(f"URL de l'API: {API_URL}")
+
+# Initialisation du client PGPT
+try:
+    client = PrivateGPTApi(base_url=API_URL)
+    st.sidebar.success("Client initialisé")
+except Exception as e:
+    st.error(f"Erreur lors de l'initialisation du client: {str(e)}")
+    st.stop()
 
 # Initialisation de l'historique des messages dans la session
 if "messages" not in st.session_state:
@@ -39,39 +44,29 @@ if prompt := st.chat_input("Entrez votre message ici..."):
         st.markdown(prompt)
 
     try:
-        # Préparation de la requête
-        data = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant."
-                },
+        # Envoi de la requête via le SDK
+        st.sidebar.write("Envoi de la requête...")
+        response = client.contextual_completions.chat_completion(
+            messages=[
                 {
                     "role": "user",
                     "content": prompt
                 }
             ]
-        }
+        )
+        
+        # Traitement de la réponse
+        if response and hasattr(response, 'choices') and len(response.choices) > 0:
+            # Ajout de la réponse à l'historique
+            assistant_response = response.choices[0].message.content
+            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+            with st.chat_message("assistant"):
+                st.markdown(assistant_response)
+        else:
+            st.error("Format de réponse inattendu")
+            st.write("Réponse reçue:", response)
 
-        # Envoi de la requête
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(API_URL, headers=headers, json=data)
-            response.raise_for_status()
-            
-            # Traitement de la réponse
-            result = response.json()
-            
-            if "content" in result and isinstance(result["content"], list) and len(result["content"]) > 0:
-                # Extraire le texte de la première entrée de content
-                text_content = result["content"][0]["text"]
-                # Ajout de la réponse à l'historique
-                st.session_state.messages.append({"role": "assistant", "content": text_content})
-                with st.chat_message("assistant"):
-                    st.markdown(text_content)
-            else:
-                st.error(f"Format de réponse inattendu. Réponse reçue: {json.dumps(result, indent=2)}")
-
-    except httpx.TimeoutException:
-        st.error("La requête a pris trop de temps. Veuillez réessayer.")
     except Exception as e:
-        st.error(f"Erreur: {str(e)}") 
+        st.error(f"Erreur lors de l'envoi de la requête: {str(e)}")
+        st.write("Détails de l'erreur:", str(e))
+        st.sidebar.error("Échec de la requête") 
