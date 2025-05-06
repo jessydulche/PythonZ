@@ -30,10 +30,64 @@ if "messages" not in st.session_state:
 if "uploaded_files" not in st.session_state:
     st.session_state.uploaded_files = []
 
+# Fonction pour lister les documents ingérés
+def list_ingested_documents():
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.get(
+                f"{API_URL}/v1/ingest/list",
+                params={"collection": "chat_documents"},
+                headers={"accept": "application/json"}
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        st.error(f"Erreur lors de la récupération des documents: {str(e)}")
+        return None
+
+# Fonction pour supprimer un document
+def delete_document(artifact_name):
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{API_URL}/v1/delete",
+                json={
+                    "collection": "chat_documents",
+                    "artifact": artifact_name
+                },
+                headers={"accept": "application/json"}
+            )
+            response.raise_for_status()
+            return True
+    except Exception as e:
+        st.error(f"Erreur lors de la suppression du document: {str(e)}")
+        return False
+
 # Sidebar pour le téléchargement des fichiers
 with st.sidebar:
     st.header("📁 Gestion des fichiers")
-    uploaded_file = st.file_uploader("Téléchargez un fichier", type=['txt', 'pdf', 'docx', 'md'])
+    
+    # Afficher les documents déjà ingérés
+    st.subheader("Documents disponibles:")
+    documents = list_ingested_documents()
+    if documents and "data" in documents:
+        for doc in documents["data"]:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"📄 {doc['artifact']}")
+                if doc.get('doc_metadata'):
+                    st.write(f"   └─ {doc['doc_metadata']}")
+            with col2:
+                if st.button("🗑️", key=f"delete_{doc['artifact']}"):
+                    if delete_document(doc['artifact']):
+                        st.success(f"Document {doc['artifact']} supprimé avec succès!")
+                        st.rerun()
+    
+    st.divider()
+    
+    # Section pour le téléchargement de nouveaux fichiers
+    st.subheader("Télécharger un nouveau fichier")
+    uploaded_file = st.file_uploader("Choisissez un fichier", type=['txt', 'pdf', 'docx', 'md'])
     
     if uploaded_file is not None:
         try:
@@ -63,6 +117,8 @@ with st.sidebar:
                     # Ajouter le fichier à la liste des fichiers téléchargés
                     st.session_state.uploaded_files.append(uploaded_file.name)
                     st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
+                    # Rafraîchir la page pour mettre à jour la liste des documents
+                    st.rerun()
                 
         except Exception as e:
             st.error(f"Erreur lors du téléchargement du fichier: {str(e)}")
@@ -73,12 +129,6 @@ with st.sidebar:
                     os.unlink(tmp_file_path)
             except Exception as e:
                 st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
-    
-    # Afficher la liste des fichiers téléchargés
-    if st.session_state.uploaded_files:
-        st.subheader("Fichiers téléchargés:")
-        for file in st.session_state.uploaded_files:
-            st.write(f"📄 {file}")
 
 # Affichage de l'historique des messages
 for message in st.session_state.messages:
