@@ -90,45 +90,47 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Choisissez un fichier", type=['txt', 'pdf', 'docx', 'md'])
     
     if uploaded_file is not None:
-        try:
-            # Créer un fichier temporaire avec un contexte
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
-                tmp_file.write(uploaded_file.getvalue())
-                tmp_file_path = tmp_file.name
-
-            # Préparer les données pour l'ingestion
-            with open(tmp_file_path, 'rb') as file:
-                files = {'file': (uploaded_file.name, file)}
-                params = {
-                    'artifact': uploaded_file.name,
-                    'collection': 'chat_documents'
-                }
-                
-                # Envoyer le fichier à l'API
-                with httpx.Client(timeout=30.0) as client:
-                    response = client.post(
-                        f"{API_URL}/v1/ingest/file",
-                        headers={"accept": "application/json"},
-                        files=files,
-                        params=params
-                    )
-                    response.raise_for_status()
-                    
-                    # Ajouter le fichier à la liste des fichiers téléchargés
-                    st.session_state.uploaded_files.append(uploaded_file.name)
-                    st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
-                    # Rafraîchir la page pour mettre à jour la liste des documents
-                    st.rerun()
-                
-        except Exception as e:
-            st.error(f"Erreur lors du téléchargement du fichier: {str(e)}")
-        finally:
-            # Nettoyer le fichier temporaire de manière sécurisée
+        # Vérifier si le fichier n'a pas déjà été téléchargé dans cette session
+        if uploaded_file.name not in st.session_state.uploaded_files:
             try:
-                if os.path.exists(tmp_file_path):
-                    os.unlink(tmp_file_path)
+                # Créer un fichier temporaire avec un contexte
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
+                    tmp_file.write(uploaded_file.getvalue())
+                    tmp_file_path = tmp_file.name
+
+                # Préparer les données pour l'ingestion
+                with open(tmp_file_path, 'rb') as file:
+                    files = {'file': (uploaded_file.name, file)}
+                    params = {
+                        'artifact': uploaded_file.name,
+                        'collection': 'chat_documents'
+                    }
+                    
+                    # Envoyer le fichier à l'API
+                    with httpx.Client(timeout=30.0) as client:
+                        response = client.post(
+                            f"{API_URL}/v1/ingest/file",
+                            headers={"accept": "application/json"},
+                            files=files,
+                            params=params
+                        )
+                        response.raise_for_status()
+                        
+                        # Ajouter le fichier à la liste des fichiers téléchargés
+                        st.session_state.uploaded_files.append(uploaded_file.name)
+                        st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
+                    
             except Exception as e:
-                st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
+                st.error(f"Erreur lors du téléchargement du fichier: {str(e)}")
+            finally:
+                # Nettoyer le fichier temporaire de manière sécurisée
+                try:
+                    if os.path.exists(tmp_file_path):
+                        os.unlink(tmp_file_path)
+                except Exception as e:
+                    st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
+        else:
+            st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
 
 # Affichage de l'historique des messages
 for message in st.session_state.messages:
@@ -144,17 +146,22 @@ if prompt := st.chat_input("Entrez votre message ici..."):
 
     try:
         # Préparation de la requête avec contexte si des fichiers sont présents
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant. Use the provided context to answer questions accurately."
+            }
+        ]
+        
+        # Ajouter l'historique des messages
+        for message in st.session_state.messages:
+            messages.append({
+                "role": message["role"],
+                "content": message["content"]
+            })
+
         data = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a helpful assistant. Use the provided context to answer questions accurately."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
+            "messages": messages,
             "use_context": len(st.session_state.uploaded_files) > 0,
             "context_filter": {
                 "collection": "chat_documents"
