@@ -1,21 +1,13 @@
-# Chatbot Zylon AI avec Streamlit
+# Chat avec Zylon AI
 
-Une interface de chat moderne et interactive utilisant Streamlit pour communiquer avec l'API Zylon AI.
+Une interface de chat utilisant Streamlit pour interagir avec l'API PGPT.
 
-## 🚀 Fonctionnalités
+## Prérequis
 
-- Interface utilisateur moderne et responsive
-- Historique des conversations
-- Support du formatage Markdown
-- Gestion des erreurs et des timeouts
-- Interface intuitive de type chat
+- Python 3.11 ou supérieur
+- Un serveur PGPT en cours d'exécution
 
-## 📋 Prérequis
-
-- Python 3.7 ou supérieur
-- pip (gestionnaire de paquets Python)
-
-## 🔧 Installation
+## Installation
 
 1. Clonez ce dépôt :
 ```bash
@@ -28,43 +20,42 @@ cd [NOM_DU_DOSSIER]
 pip install -r requirements.txt
 ```
 
-3. Créez un fichier `.env` à la racine du projet et ajoutez votre URL d'API :
+3. Créez un fichier `.env` à la racine du projet avec l'URL de votre API PGPT :
 ```
-URL=votre_url_api_ici
+URL=http://localhost:8000
 ```
 
-## 🎮 Utilisation
+## Utilisation
 
-Pour lancer l'application :
+1. Assurez-vous que votre serveur PGPT est en cours d'exécution
 
+2. Lancez l'application Streamlit :
 ```bash
 streamlit run streamlit_chat.py
 ```
 
-L'application s'ouvrira automatiquement dans votre navigateur par défaut.
+3. Ouvrez votre navigateur à l'adresse indiquée (généralement http://localhost:8501)
 
-## 📦 Dépendances
+## Fonctionnalités
+
+- Interface de chat intuitive
+- Historique des conversations
+- Intégration avec l'API PGPT via le SDK officiel
+- Gestion des erreurs et feedback utilisateur
+
+## Structure du Projet
+
+- `streamlit_chat.py` : Application principale
+- `requirements.txt` : Dépendances Python
+- `.env` : Configuration de l'API (à créer)
+
+## Dépendances
 
 - streamlit==1.32.0
-- httpx==0.27.0
+- httpx>=0.26.0,<0.27.0
 - python-dotenv==1.0.1
+- pgpt_python==0.1.2
 
-## 🔍 Structure du Projet
+## Support
 
-```
-.
-├── streamlit_chat.py    # Application principale
-├── requirements.txt     # Dépendances du projet
-├── .env                # Variables d'environnement
-└── README.md          # Documentation
-```
-
-## ⚠️ Notes
-
-- Assurez-vous d'avoir une connexion Internet active pour communiquer avec l'API
-- Le fichier `.env` ne doit pas être partagé ou commité dans le dépôt
-- Les timeouts sont configurés à 30 secondes par défaut
-
-## 🤝 Contribution
-
-Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou à soumettre une pull request. 
+Pour toute question ou problème, veuillez ouvrir une issue sur le dépôt. 

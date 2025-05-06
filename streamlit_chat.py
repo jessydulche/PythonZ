@@ -1,6 +1,4 @@
 import streamlit as st
-import httpx
-import json
 from dotenv import load_dotenv
 import os
 import tempfile
@@ -14,11 +12,6 @@ API_URL = os.getenv("URL")
 if not API_URL:
     st.error("L'URL de l'API n'est pas définie dans le fichier .env")
     st.stop()
-
-headers = {
-    "accept": "application/json",
-    "Content-Type": "application/json"
-}
 
 # Configuration de la page Streamlit
 st.set_page_config(page_title="Chat avec Assistant IA", page_icon="🤖")
@@ -138,8 +131,6 @@ if prompt := st.chat_input("Entrez votre message ici..."):
             else:
                 st.error(f"Format de réponse inattendu. Réponse reçue: {json.dumps(result, indent=2)}")
 
-    except httpx.TimeoutException:
-        st.error("La requête a pris trop de temps. Veuillez réessayer.")
     except Exception as e:
         st.error(f"Erreur: {str(e)}")
         # Afficher la réponse complète en cas d'erreur
