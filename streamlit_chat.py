@@ -8,6 +8,8 @@ import json
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
+from datetime import datetime
+import pandas as pd
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -40,13 +42,21 @@ if "uploaded_files" not in st.session_state:
 if "upload_progress" not in st.session_state:
     st.session_state.upload_progress = {}
 
-# Fonction pour lister les documents ingérés
-def list_ingested_documents():
+# Fonction pour lister les documents ingérés avec pagination et recherche
+def list_ingested_documents(search_query=None, page=1, per_page=20):
     try:
         with httpx.Client(timeout=30.0) as client:
+            params = {
+                "collection": "chat_documents",
+                "page": page,
+                "per_page": per_page
+            }
+            if search_query:
+                params["search"] = search_query
+                
             response = client.get(
                 f"{API_URL}/v1/ingest/list",
-                params={"collection": "chat_documents"},
+                params=params,
                 headers={"accept": "application/json"}
             )
             response.raise_for_status()
@@ -155,59 +165,108 @@ def upload_file_with_progress(file_path, file_name, progress_bar):
 with st.sidebar:
     st.header("📁 Gestion des fichiers")
     
-    # Afficher les documents déjà ingérés
-    st.subheader("Documents disponibles:")
-    documents = list_ingested_documents()
-    if documents and "data" in documents:
-        for doc in documents["data"]:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"📄 {doc['artifact']}")
-            with col2:
-                if st.button("🗑️", key=f"delete_{doc['artifact']}"):
-                    if delete_document(doc['artifact']):
-                        st.success(f"Document {doc['artifact']} supprimé avec succès!")
-                        st.rerun()
+    # Onglets pour différentes sections
+    tab1, tab2 = st.tabs(["📚 Documents", "⬆️ Upload"])
     
-    st.divider()
-    
-    # Section pour le téléchargement de nouveaux fichiers
-    st.subheader("Télécharger des fichiers")
-    uploaded_files = st.file_uploader("Choisissez un ou plusieurs fichiers", type=['pdf', 'txt'], accept_multiple_files=True)
-    
-    if uploaded_files:
-        for uploaded_file in uploaded_files:
-            if uploaded_file.name not in st.session_state.uploaded_files:
-                try:
-                    # Créer un fichier temporaire
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        tmp_file_path = tmp_file.name
-
-                    # Afficher la progression
-                    progress_bar = st.progress(0)
-                    file_size = os.path.getsize(tmp_file_path)
-                    size_mb = file_size / (1024 * 1024)
-                    st.write(f"Upload de {uploaded_file.name} en cours... ({size_mb:.1f} MB)")
-
-                    # Upload du fichier avec progression
-                    if upload_file_with_progress(tmp_file_path, uploaded_file.name, progress_bar):
-                        st.session_state.uploaded_files.append(uploaded_file.name)
-                        st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
-                    else:
-                        st.error(f"Échec du téléchargement de {uploaded_file.name}")
-
-                except Exception as e:
-                    st.error(f"Erreur lors du téléchargement de {uploaded_file.name}: {str(e)}")
-                finally:
-                    # Nettoyer le fichier temporaire
-                    try:
-                        if os.path.exists(tmp_file_path):
-                            os.unlink(tmp_file_path)
-                    except Exception as e:
-                        st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
+    with tab1:
+        # Barre de recherche
+        search_query = st.text_input("🔍 Rechercher un document", "")
+        
+        # Filtres
+        col1, col2 = st.columns(2)
+        with col1:
+            sort_by = st.selectbox("Trier par", ["Nom", "Date d'ajout"])
+        with col2:
+            sort_order = st.selectbox("Ordre", ["Ascendant", "Descendant"])
+        
+        # Pagination
+        page = st.number_input("Page", min_value=1, value=1)
+        per_page = st.selectbox("Documents par page", [10, 20, 50, 100])
+        
+        # Récupération et affichage des documents
+        documents = list_ingested_documents(search_query, page, per_page)
+        
+        if documents and "data" in documents:
+            # Création d'un DataFrame pour une meilleure visualisation
+            docs_data = []
+            for doc in documents["data"]:
+                docs_data.append({
+                    "Nom": doc['artifact'],
+                    "Type": os.path.splitext(doc['artifact'])[1].upper(),
+                    "Taille": f"{doc.get('size', 0) / 1024 / 1024:.1f} MB" if 'size' in doc else "N/A"
+                })
+            
+            if docs_data:
+                df = pd.DataFrame(docs_data)
+                st.dataframe(
+                    df,
+                    column_config={
+                        "Nom": st.column_config.TextColumn("Nom", width="large"),
+                        "Type": st.column_config.TextColumn("Type", width="small"),
+                        "Taille": st.column_config.TextColumn("Taille", width="small")
+                    },
+                    hide_index=True
+                )
+                
+                # Boutons d'action pour chaque document
+                for doc in documents["data"]:
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"📄 {doc['artifact']}")
+                    with col2:
+                        if st.button("🗑️", key=f"delete_{doc['artifact']}"):
+                            if delete_document(doc['artifact']):
+                                st.success(f"Document {doc['artifact']} supprimé avec succès!")
+                                st.rerun()
             else:
-                st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
+                st.info("Aucun document trouvé")
+        else:
+            st.info("Aucun document disponible")
+    
+    with tab2:
+        st.subheader("Télécharger des fichiers")
+        uploaded_files = st.file_uploader(
+            "Choisissez un ou plusieurs fichiers",
+            type=['pdf', 'txt'],
+            accept_multiple_files=True
+        )
+        
+        if uploaded_files:
+            # Afficher un résumé des fichiers à uploader
+            st.write("Fichiers sélectionnés :")
+            for file in uploaded_files:
+                size_mb = file.size / (1024 * 1024)
+                st.write(f"- {file.name} ({size_mb:.1f} MB)")
+            
+            if st.button("Commencer l'upload", type="primary"):
+                for uploaded_file in uploaded_files:
+                    if uploaded_file.name not in st.session_state.uploaded_files:
+                        try:
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
+                                tmp_file.write(uploaded_file.getvalue())
+                                tmp_file_path = tmp_file.name
+
+                            progress_bar = st.progress(0)
+                            file_size = os.path.getsize(tmp_file_path)
+                            size_mb = file_size / (1024 * 1024)
+                            st.write(f"Upload de {uploaded_file.name} en cours... ({size_mb:.1f} MB)")
+
+                            if upload_file_with_progress(tmp_file_path, uploaded_file.name, progress_bar):
+                                st.session_state.uploaded_files.append(uploaded_file.name)
+                                st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
+                            else:
+                                st.error(f"Échec du téléchargement de {uploaded_file.name}")
+
+                        except Exception as e:
+                            st.error(f"Erreur lors du téléchargement de {uploaded_file.name}: {str(e)}")
+                        finally:
+                            try:
+                                if os.path.exists(tmp_file_path):
+                                    os.unlink(tmp_file_path)
+                            except Exception as e:
+                                st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
+                    else:
+                        st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
 
 # Affichage de l'historique des messages
 for message in st.session_state.messages:
