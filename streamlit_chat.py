@@ -5,6 +5,9 @@ import tempfile
 import contextlib
 import httpx
 import json
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from tqdm import tqdm
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -14,6 +17,11 @@ API_URL = os.getenv("URL")
 if not API_URL:
     st.error("L'URL de l'API n'est pas définie dans le fichier .env")
     st.stop()
+
+# Configuration des timeouts et limites
+UPLOAD_TIMEOUT = 1800  # 30 minutes pour les gros fichiers
+MAX_RETRIES = 3
+CHUNK_SIZE = 512 * 1024  # 512KB chunks pour plus de stabilité
 
 headers = {
     "accept": "application/json",
@@ -29,6 +37,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "uploaded_files" not in st.session_state:
     st.session_state.uploaded_files = []
+if "upload_progress" not in st.session_state:
+    st.session_state.upload_progress = {}
 
 # Fonction pour lister les documents ingérés
 def list_ingested_documents():
@@ -63,6 +73,84 @@ def delete_document(artifact_name):
         st.error(f"Erreur lors de la suppression du document: {str(e)}")
         return False
 
+def stream_upload_file(file_path, file_name, collection="chat_documents"):
+    file_size = os.path.getsize(file_path)
+    chunk_size = 1024 * 1024  # 1MB chunks
+    
+    with open(file_path, 'rb') as file:
+        files = {'file': (file_name, file)}
+        params = {
+            'artifact': file_name,
+            'collection': collection
+        }
+        
+        with httpx.Client(timeout=UPLOAD_TIMEOUT) as client:
+            with client.stream(
+                "POST",
+                f"{API_URL}/v1/ingest/file",
+                headers={"accept": "application/json"},
+                files=files,
+                params=params
+            ) as response:
+                response.raise_for_status()
+                return True
+
+def upload_file_with_progress(file_path, file_name, progress_bar):
+    try:
+        file_size = os.path.getsize(file_path)
+        uploaded_size = 0
+        
+        # Configuration spéciale pour les gros fichiers PDF
+        is_large_pdf = file_name.lower().endswith('.pdf') and file_size > 50 * 1024 * 1024  # > 50MB
+        
+        with open(file_path, 'rb') as file:
+            files = {'file': (file_name, file)}
+            params = {
+                'artifact': file_name,
+                'collection': 'chat_documents'
+            }
+            
+            # Configuration du client avec timeout adapté
+            timeout = UPLOAD_TIMEOUT if is_large_pdf else 300  # 30 minutes pour gros PDF, 5 minutes pour autres
+            client = httpx.Client(timeout=timeout)
+            
+            try:
+                with client.stream(
+                    "POST",
+                    f"{API_URL}/v1/ingest/file",
+                    headers={"accept": "application/json"},
+                    files=files,
+                    params=params
+                ) as response:
+                    response.raise_for_status()
+                    
+                    # Mise à jour de la barre de progression
+                    for chunk in response.iter_bytes():
+                        uploaded_size += len(chunk)
+                        progress = min(1.0, uploaded_size / file_size)
+                        progress_bar.progress(progress)
+                    
+                    return True
+            except httpx.TimeoutException:
+                if is_large_pdf:
+                    st.warning(f"Le fichier {file_name} est très volumineux. Tentative avec un timeout plus long...")
+                    # Nouvelle tentative avec un timeout encore plus long
+                    with httpx.Client(timeout=3600) as retry_client:  # 1 heure
+                        with retry_client.stream(
+                            "POST",
+                            f"{API_URL}/v1/ingest/file",
+                            headers={"accept": "application/json"},
+                            files=files,
+                            params=params
+                        ) as retry_response:
+                            retry_response.raise_for_status()
+                            return True
+                raise
+    except Exception as e:
+        raise e
+    finally:
+        client.close()
+
 # Sidebar pour le téléchargement des fichiers
 with st.sidebar:
     st.header("📁 Gestion des fichiers")
@@ -75,8 +163,6 @@ with st.sidebar:
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.write(f"📄 {doc['artifact']}")
-                if doc.get('doc_metadata'):
-                    st.write(f"   └─ {doc['doc_metadata']}")
             with col2:
                 if st.button("🗑️", key=f"delete_{doc['artifact']}"):
                     if delete_document(doc['artifact']):
@@ -86,51 +172,42 @@ with st.sidebar:
     st.divider()
     
     # Section pour le téléchargement de nouveaux fichiers
-    st.subheader("Télécharger un nouveau fichier")
-    uploaded_file = st.file_uploader("Choisissez un fichier", type=['txt', 'pdf', 'docx', 'md'])
+    st.subheader("Télécharger des fichiers")
+    uploaded_files = st.file_uploader("Choisissez un ou plusieurs fichiers", type=['pdf', 'txt'], accept_multiple_files=True)
     
-    if uploaded_file is not None:
-        # Vérifier si le fichier n'a pas déjà été téléchargé dans cette session
-        if uploaded_file.name not in st.session_state.uploaded_files:
-            try:
-                # Créer un fichier temporaire avec un contexte
-                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
-                    tmp_file.write(uploaded_file.getvalue())
-                    tmp_file_path = tmp_file.name
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            if uploaded_file.name not in st.session_state.uploaded_files:
+                try:
+                    # Créer un fichier temporaire
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_file_path = tmp_file.name
 
-                # Préparer les données pour l'ingestion
-                with open(tmp_file_path, 'rb') as file:
-                    files = {'file': (uploaded_file.name, file)}
-                    params = {
-                        'artifact': uploaded_file.name,
-                        'collection': 'chat_documents'
-                    }
-                    
-                    # Envoyer le fichier à l'API
-                    with httpx.Client(timeout=30.0) as client:
-                        response = client.post(
-                            f"{API_URL}/v1/ingest/file",
-                            headers={"accept": "application/json"},
-                            files=files,
-                            params=params
-                        )
-                        response.raise_for_status()
-                        
-                        # Ajouter le fichier à la liste des fichiers téléchargés
+                    # Afficher la progression
+                    progress_bar = st.progress(0)
+                    file_size = os.path.getsize(tmp_file_path)
+                    size_mb = file_size / (1024 * 1024)
+                    st.write(f"Upload de {uploaded_file.name} en cours... ({size_mb:.1f} MB)")
+
+                    # Upload du fichier avec progression
+                    if upload_file_with_progress(tmp_file_path, uploaded_file.name, progress_bar):
                         st.session_state.uploaded_files.append(uploaded_file.name)
                         st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
-                    
-            except Exception as e:
-                st.error(f"Erreur lors du téléchargement du fichier: {str(e)}")
-            finally:
-                # Nettoyer le fichier temporaire de manière sécurisée
-                try:
-                    if os.path.exists(tmp_file_path):
-                        os.unlink(tmp_file_path)
+                    else:
+                        st.error(f"Échec du téléchargement de {uploaded_file.name}")
+
                 except Exception as e:
-                    st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
-        else:
-            st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
+                    st.error(f"Erreur lors du téléchargement de {uploaded_file.name}: {str(e)}")
+                finally:
+                    # Nettoyer le fichier temporaire
+                    try:
+                        if os.path.exists(tmp_file_path):
+                            os.unlink(tmp_file_path)
+                    except Exception as e:
+                        st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
+            else:
+                st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
 
 # Affichage de l'historique des messages
 for message in st.session_state.messages:
@@ -145,11 +222,11 @@ if prompt := st.chat_input("Entrez votre message ici..."):
         st.markdown(prompt)
 
     try:
-        # Préparation de la requête avec contexte si des fichiers sont présents
+        # Préparation de la requête avec contexte
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful assistant. Use the provided context to answer questions accurately."
+                "content": "You are a helpful assistant. Use the provided context to answer questions accurately. When dealing with PDF documents, make sure to reference specific parts of the text when possible."
             }
         ]
         
@@ -160,13 +237,14 @@ if prompt := st.chat_input("Entrez votre message ici..."):
                 "content": message["content"]
             })
 
+        # Configuration du contexte
         data = {
             "messages": messages,
-            "use_context": len(st.session_state.uploaded_files) > 0,
+            "use_context": True,
             "context_filter": {
                 "collection": "chat_documents"
-            } if st.session_state.uploaded_files else None,
-            "stream": True  # Activation du streaming
+            },
+            "stream": True
         }
 
         # Création d'un conteneur pour le message de l'assistant
