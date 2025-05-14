@@ -227,7 +227,7 @@ with st.sidebar:
         st.subheader("Télécharger des fichiers")
         uploaded_files = st.file_uploader(
             "Choisissez un ou plusieurs fichiers",
-            type=['pdf', 'txt'],
+            type=['pdf', 'txt',"docx"],
             accept_multiple_files=True
         )
         
@@ -285,7 +285,7 @@ if prompt := st.chat_input("Entrez votre message ici..."):
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful assistant. Use the provided context to answer questions accurately. When dealing with PDF documents, make sure to reference specific parts of the text when possible."
+                "content": "tu es un expert en immobilier et tu es là pour aider l'utilisateur à trouver des informations sur les documents téléchargés."
             }
         ]
         

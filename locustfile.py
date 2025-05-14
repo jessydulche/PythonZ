@@ -4,6 +4,7 @@ import random
 import os
 from dotenv import load_dotenv
 import time
+import logging
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -13,9 +14,11 @@ API_URL = os.getenv("URL")
 if not API_URL: 
     raise ValueError("L'URL de l'API n'est pas définie dans le fichier .env")
 
+logging.basicConfig(level=logging.INFO)
+
 class ChatUser(HttpUser):
-    host = os.getenv("URL")
-    wait_time = between(1, 3)  # Temps d'attente entre les requêtes
+    host = os.getenv("URL") # URL de l'API
+    wait_time = between(45, 180)  # Temps d'attente entre les requêtes
     total_tokens = 0  # Variable pour suivre le nombre total de tokens
     start_time = time.time()  # Temps de début pour le calcul des tokens par seconde
     first_token_time = None  # Temps pour le premier token
@@ -35,6 +38,7 @@ class ChatUser(HttpUser):
     @task(3)
     def send_chat_message(self):
         """Simulation d'envoi de message"""
+        logging.info("Envoi d'un message de chat...")
         messages = [
             {
                 "role": "system",
@@ -63,6 +67,7 @@ class ChatUser(HttpUser):
             catch_response=True,
             stream=True  # Activez le streaming
         ) as response:
+            logging.info(f"Réponse reçue : {response.status_code}")
             if response.status_code == 200:
                 try:
                     for line in response.iter_lines():
