@@ -168,24 +168,6 @@ def upload_file_with_progress(file_path, file_name, progress_bar):
 with st.sidebar:
     st.header("📁 Gestion des fichiers")
     
-    # Affichage des documents existants
-    documents = list_ingested_documents()
-    if documents and "data" in documents:
-        st.subheader("📚 Documents disponibles")
-        for doc in documents["data"]:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"📄 {doc['artifact']}")
-            with col2:
-                if st.button("🗑️", key=f"delete_{doc['artifact']}"):
-                    if delete_document(doc['artifact']):
-                        st.success(f"Document {doc['artifact']} supprimé avec succès!")
-                        st.rerun()
-    else:
-        st.info("Aucun document disponible")
-    
-    st.divider()
-    
     st.subheader("Télécharger des fichiers")
     uploaded_files = st.file_uploader(
         "Choisissez un ou plusieurs fichiers",
@@ -229,6 +211,24 @@ with st.sidebar:
                             st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
                 else:
                     st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
+    
+    st.divider()
+    
+    # Affichage des documents existants
+    documents = list_ingested_documents()
+    if documents and "data" in documents:
+        st.subheader("📚 Documents disponibles")
+        for doc in documents["data"]:
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"📄 {doc['artifact']}")
+            with col2:
+                if st.button("🗑️", key=f"delete_{doc['artifact']}"):
+                    if delete_document(doc['artifact']):
+                        st.success(f"Document {doc['artifact']} supprimé avec succès!")
+                        st.rerun()
+    else:
+        st.info("Aucun document disponible")
 
 # Affichage de l'historique des messages
 for message in st.session_state.messages:
@@ -307,10 +307,11 @@ if prompt := st.chat_input("Entrez votre message ici..."):
                                         sources = delta.get('sources', [])
                                         if sources:
                                             st.write("Sources utilisées :")
-                                            for source in sources:
-                                                st.write(f"- Document: {source.get('document', {}).get('artifact', 'N/A')}")
-                                                st.write(f"  Extrait: {source.get('text', 'N/A')}")
-                                                st.write("---")
+                                            for i, source in enumerate(sources):
+                                                with st.expander(f"📄 Source {i+1}: {source.get('document', {}).get('artifact', 'N/A')}"):
+                                                    st.write(f"**Document:** {source.get('document', {}).get('artifact', 'N/A')}")
+                                                    st.write(f"**Extrait:** {source.get('text', 'N/A')}")
+                                                    st.write("---")
                                 
                         except json.JSONDecodeError as e:
                             continue
