@@ -19,6 +19,11 @@ cd [NOM_DU_DOSSIER]
 pip install -r requirements.txt
 ```
 
+3. Créez un fichier `.env` à la racine du projet avec l'URL de l'API :
+```
+URL=
+```
+
 ## Utilisation
 
 1. Lancez l'application Streamlit :
