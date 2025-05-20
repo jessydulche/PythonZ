@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - URL=${URL}
+    command: streamlit run streamlit_chat.py --server.address 0.0.0.0 --server.port 8501 --server.runOnSave true --server.fileWatcherType poll 

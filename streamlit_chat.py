@@ -31,8 +31,8 @@ headers = {
 }
 
 # Configuration de la page Streamlit
-st.set_page_config(page_title="Chat avec Assistant IA", page_icon="🤖")
-st.title("Chat avec Assistant IA")
+st.set_page_config(page_title="MonChatZylon", page_icon="🤖")
+st.title("Chat avec Mistral Small 3")
 
 # Ajout du mode debug
 debug_mode = st.sidebar.checkbox("Mode Debug", value=False)
