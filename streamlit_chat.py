@@ -2,12 +2,8 @@ import streamlit as st
 from dotenv import load_dotenv
 import os
 import tempfile
-import contextlib
 import httpx
 import json
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from tqdm import tqdm
 from datetime import datetime
 import pandas as pd
 
@@ -86,27 +82,6 @@ def delete_document(artifact_name):
         st.error(f"Erreur lors de la suppression du document: {str(e)}")
         return False
 
-def stream_upload_file(file_path, file_name, collection="chat_documents"):
-    file_size = os.path.getsize(file_path)
-    chunk_size = 1024 * 1024  # 1MB chunks
-    
-    with open(file_path, 'rb') as file:
-        files = {'file': (file_name, file)}
-        params = {
-            'artifact': file_name,
-            'collection': collection
-        }
-        
-        with httpx.Client(timeout=UPLOAD_TIMEOUT) as client:
-            with client.stream(
-                "POST",
-                f"{API_URL}/v1/ingest/file",
-                headers={"accept": "application/json"},
-                files=files,
-                params=params
-            ) as response:
-                response.raise_for_status()
-                return True
 
 def upload_file_with_progress(file_path, file_name, progress_bar):
     try:
