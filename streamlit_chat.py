@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from datetime import datetime
 import pandas as pd
+import re
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -233,7 +234,11 @@ with st.sidebar:
 # Affichage de l'historique des messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        if message["role"] == "assistant":
+            clean_content = re.sub(r'<citation.*?>.*?<\/citation>', '', message["content"], flags=re.DOTALL)
+            st.markdown(clean_content)
+        else:
+            st.markdown(message["content"])
 
 # Zone de saisie pour l'utilisateur
 if prompt := st.chat_input("Entrez votre message ici..."):
@@ -247,7 +252,7 @@ if prompt := st.chat_input("Entrez votre message ici..."):
         messages = [
             {
                 "role": "system",
-                "content": "tu es un expert en immobilier et tu es là pour aider l'utilisateur à trouver des informations sur les documents téléchargés."
+                "content": "En tant qu'expert immobilier technique, vos réponses synthétiques s'appuient uniquement sur les dates/résolutions des PV d'AG, articles de règlements et montants votés, avec précision chiffrée (exemple type : 'Rénovation façade : 150k€ votés le 05/2023 (PV §12)'). Ne mentionne jamais ce qui n'est pas pertinent."
             }
         ]
         
@@ -267,7 +272,8 @@ if prompt := st.chat_input("Entrez votre message ici..."):
             },
             "stream": True,
             "include_sources": True,
-            "generate_citations": True
+            "generate_citations": True,
+            "use_default_prompt": True
         }
 
         # Création d'un conteneur pour le message de l'assistant
@@ -302,7 +308,7 @@ if prompt := st.chat_input("Entrez votre message ici..."):
                                     if delta.get('type') == 'text_delta':
                                         text = delta.get('text', '')
                                         full_response += text
-                                        message_placeholder.markdown(full_response + "▌")
+
                                     elif delta.get('type') == 'source_delta':
                                         sources = delta.get('sources', [])
                                         if sources:
@@ -320,7 +326,8 @@ if prompt := st.chat_input("Entrez votre message ici..."):
 
         # Mise à jour finale du message
         if full_response:
-            message_placeholder.markdown(full_response)
+            clean_response = re.sub(r'<citation.*?>.*?<\/citation>', '', full_response, flags=re.DOTALL)
+            message_placeholder.markdown(clean_response)
             st.session_state.messages.append({"role": "assistant", "content": full_response})
         else:
             st.error("Aucune réponse n'a été reçue de l'API")
