@@ -287,12 +287,19 @@ if prompt := st.chat_input("Entrez votre message ici..."):
                                     elif delta.get('type') == 'source_delta':
                                         sources = delta.get('sources', [])
                                         if sources:
-                                            st.write("Sources utilisées :")
-                                            for i, source in enumerate(sources):
-                                                with st.expander(f"📄 Source {i+1}: {source.get('document', {}).get('artifact', 'N/A')}"):
-                                                    st.write(f"**Document:** {source.get('document', {}).get('artifact', 'N/A')}")
-                                                    st.write(f"**Extrait:** {source.get('text', 'N/A')}")
-                                                    st.write("---")
+                                            # Filtrer les sources avec un score > 0.70
+                                            relevant_sources = [s for s in sources if s.get('score', 0) > 0.70]
+                                            
+                                            if relevant_sources:
+                                                st.write("Sources pertinentes (score > 70%) :")
+                                                # Trier les sources par score décroissant
+                                                for source in sorted(relevant_sources, key=lambda x: x.get('score', 0), reverse=True):
+                                                    with st.expander(f"📄 {source.get('document', {}).get('artifact', 'N/A')} (Score: {source.get('score', 0):.2f})"):
+                                                        st.write(f"**Document:** {source.get('document', {}).get('artifact', 'N/A')}")
+                                                        st.write(f"**Extrait:** {source.get('text', 'N/A')}")
+                                                        st.write("---")
+                                            else:
+                                                st.info("Aucune source avec un score supérieur à 70% n'a été trouvée.")
                                 
                         except json.JSONDecodeError as e:
                             continue

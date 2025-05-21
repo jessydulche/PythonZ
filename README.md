@@ -24,6 +24,36 @@ pip install -r requirements.txt
 URL=
 ```
 
+## Utilisation avec Docker
+
+### Prérequis
+- Docker Engine (version 20.10.0 ou supérieure)
+- Docker Compose (version 2.0.0 ou supérieure)
+
+### Configuration
+1. Créez un fichier `.env` à la racine du projet avec les variables suivantes :
+```
+URL=http://votre-api-url
+```
+
+### Démarrage
+1. Construisez et démarrez les conteneurs :
+```bash
+docker-compose up --build
+```
+
+2. L'application sera accessible à l'adresse http://localhost:8501
+
+### Arrêt
+Pour arrêter l'application :
+```bash
+docker-compose down
+```
+
+### Volumes
+- Le code source est monté en volume pour permettre le rechargement automatique lors des modifications
+- Les modifications du code sont automatiquement prises en compte grâce au mode `--server.runOnSave true`
+
 ## Utilisation
 
 1. Lancez l'application Streamlit :
