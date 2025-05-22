@@ -317,4 +317,4 @@ if prompt := st.chat_input("Entrez votre message ici..."):
     except Exception as e:
         st.error(f"Erreur: {str(e)}")
         # Afficher la réponse complète en cas d'erreur
-        st.write("Réponse complète:", result if 'result' in locals() else "Pas de réponse disponible")
+        st.write("Réponse complète:", full_response if full_response else "Pas de réponse disponible")
