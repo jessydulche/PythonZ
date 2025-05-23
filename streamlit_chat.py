@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 import pandas as pd
 import re
+import numpy as np
 
 # Chargement des variables d'environnement
 load_dotenv()
@@ -140,71 +141,161 @@ def upload_file_with_progress(file_path, file_name, progress_bar):
     finally:
         client.close()
 
+# Fonction pour générer des embeddings
+def generate_embeddings(text):
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{API_URL}/v1/embeddings",
+                json={"input": text},
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        st.error(f"Erreur lors de la génération des embeddings: {str(e)}")
+        return None
+
+# Fonction pour calculer la similarité cosinus entre deux vecteurs
+def cosine_similarity(v1, v2):
+    dot_product = np.dot(v1, v2)
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+    return dot_product / (norm_v1 * norm_v2)
+
+# Fonction pour filtrer les chunks par similarité
+def filter_chunks_by_similarity(query_embedding, chunks, threshold=0.7):
+    filtered_chunks = []
+    for chunk in chunks:
+        if "embedding" in chunk:
+            similarity = cosine_similarity(query_embedding, chunk["embedding"])
+            if similarity > threshold:
+                chunk["similarity_score"] = similarity
+                filtered_chunks.append(chunk)
+    return sorted(filtered_chunks, key=lambda x: x["similarity_score"], reverse=True)
+
+# Fonction pour rechercher des chunks pertinents
+def search_chunks(query, collection="chat_documents", limit=5):
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{API_URL}/v1/chunks",
+                json={
+                    "text": query,
+                    "context_filter": {
+                        "collection": collection
+                    },
+                    "limit": limit
+                },
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        st.error(f"Erreur lors de la recherche des chunks: {str(e)}")
+        return None
+
+# Fonction pour ingérer du texte
+def ingest_text(text, artifact_name):
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{API_URL}/v1/ingest/text",
+                json={
+                    "text": text,
+                    "artifact": artifact_name,
+                    "collection": "chat_documents"
+                },
+                headers=headers
+            )
+            response.raise_for_status()
+            return True
+    except Exception as e:
+        st.error(f"Erreur lors de l'ingestion du texte: {str(e)}")
+        return False
+
 # Sidebar pour le téléchargement des fichiers
 with st.sidebar:
     st.header("📁 Gestion des fichiers")
     
-    st.subheader("Télécharger des fichiers")
-    uploaded_files = st.file_uploader(
-        "Choisissez un ou plusieurs fichiers",
-        type=['pdf', 'txt',"docx"],
-        accept_multiple_files=True
-    )
+    # Onglets pour choisir entre fichier et texte
+    tab1, tab2 = st.tabs(["📄 Fichiers", "📝 Texte"])
     
-    if uploaded_files:
-        # Afficher un résumé des fichiers à uploader
-        st.write("Fichiers sélectionnés :")
-        for file in uploaded_files:
-            size_mb = file.size / (1024 * 1024)
-            st.write(f"- {file.name} ({size_mb:.1f} MB)")
+    with tab1:
+        st.subheader("Télécharger des fichiers")
+        uploaded_files = st.file_uploader(
+            "Choisissez un ou plusieurs fichiers",
+            type=['pdf', 'txt', "docx"],
+            accept_multiple_files=True
+        )
         
-        if st.button("Commencer l'upload", type="primary"):
-            for uploaded_file in uploaded_files:
-                if uploaded_file.name not in st.session_state.uploaded_files:
-                    try:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
-                            tmp_file.write(uploaded_file.getvalue())
-                            tmp_file_path = tmp_file.name
-
-                        progress_bar = st.progress(0)
-                        file_size = os.path.getsize(tmp_file_path)
-                        size_mb = file_size / (1024 * 1024)
-                        st.write(f"Upload de {uploaded_file.name} en cours... ({size_mb:.1f} MB)")
-
-                        if upload_file_with_progress(tmp_file_path, uploaded_file.name, progress_bar):
-                            st.session_state.uploaded_files.append(uploaded_file.name)
-                            st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
-                        else:
-                            st.error(f"Échec du téléchargement de {uploaded_file.name}")
-
-                    except Exception as e:
-                        st.error(f"Erreur lors du téléchargement de {uploaded_file.name}: {str(e)}")
-                    finally:
+        if uploaded_files:
+            # Afficher un résumé des fichiers à uploader
+            st.write("Fichiers sélectionnés :")
+            for file in uploaded_files:
+                size_mb = file.size / (1024 * 1024)
+                st.write(f"- {file.name} ({size_mb:.1f} MB)")
+            
+            if st.button("Commencer l'upload", type="primary"):
+                for uploaded_file in uploaded_files:
+                    if uploaded_file.name not in st.session_state.uploaded_files:
                         try:
-                            if os.path.exists(tmp_file_path):
-                                os.unlink(tmp_file_path)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp_file:
+                                tmp_file.write(uploaded_file.getvalue())
+                                tmp_file_path = tmp_file.name
+
+                            progress_bar = st.progress(0)
+                            file_size = os.path.getsize(tmp_file_path)
+                            size_mb = file_size / (1024 * 1024)
+                            st.write(f"Upload de {uploaded_file.name} en cours... ({size_mb:.1f} MB)")
+
+                            if upload_file_with_progress(tmp_file_path, uploaded_file.name, progress_bar):
+                                st.session_state.uploaded_files.append(uploaded_file.name)
+                                st.success(f"Fichier {uploaded_file.name} téléchargé avec succès!")
+                            else:
+                                st.error(f"Échec du téléchargement de {uploaded_file.name}")
+
                         except Exception as e:
-                            st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
-                else:
-                    st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
-    
-    st.divider()
-    
-    # Affichage des documents existants
-    documents = list_ingested_documents()
-    if documents and "data" in documents:
-        st.subheader("📚 Documents disponibles")
-        for doc in documents["data"]:
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"📄 {doc['artifact']}")
-            with col2:
-                if st.button("🗑️", key=f"delete_{doc['artifact']}"):
-                    if delete_document(doc['artifact']):
-                        st.success(f"Document {doc['artifact']} supprimé avec succès!")
-                        st.rerun()
-    else:
-        st.info("Aucun document disponible")
+                            st.error(f"Erreur lors du téléchargement de {uploaded_file.name}: {str(e)}")
+                        finally:
+                            try:
+                                if os.path.exists(tmp_file_path):
+                                    os.unlink(tmp_file_path)
+                            except Exception as e:
+                                st.warning(f"Impossible de supprimer le fichier temporaire: {str(e)}")
+                    else:
+                        st.info(f"Le fichier {uploaded_file.name} a déjà été téléchargé dans cette session.")
+        
+        st.divider()
+        
+        # Affichage des documents existants
+        documents = list_ingested_documents()
+        if documents and "data" in documents:
+            st.subheader("📚 Documents disponibles")
+            for doc in documents["data"]:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"📄 {doc['artifact']}")
+                with col2:
+                    if st.button("🗑️", key=f"delete_{doc['artifact']}"):
+                        if delete_document(doc['artifact']):
+                            st.success(f"Document {doc['artifact']} supprimé avec succès!")
+                            st.rerun()
+        else:
+            st.info("Aucun document disponible")
+
+    with tab2:
+        st.subheader("Ingérer du texte")
+        text_input = st.text_area("Entrez votre texte ici", height=200)
+        text_name = st.text_input("Nom du document")
+        
+        if st.button("Ingérer le texte", key="ingest_text"):
+            if text_input and text_name:
+                if ingest_text(text_input, text_name):
+                    st.success(f"Texte '{text_name}' ingéré avec succès!")
+                    st.rerun()
+            else:
+                st.warning("Veuillez entrer du texte et un nom de document")
 
 # Affichage de l'historique des messages
 for message in st.session_state.messages:
@@ -217,12 +308,31 @@ for message in st.session_state.messages:
 
 # Zone de saisie pour l'utilisateur
 if prompt := st.chat_input("Entrez votre message ici..."):
-    # Ajout du message de l'utilisateur à l'historique
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     try:
+        # Générer l'embedding de la requête
+        query_embedding_response = generate_embeddings(prompt)
+        if not query_embedding_response or "data" not in query_embedding_response:
+            st.error("Impossible de générer l'embedding de la requête")
+            st.stop()
+
+        query_embedding = query_embedding_response["data"][0]["embedding"]
+
+        # Rechercher les chunks pertinents
+        chunks_response = search_chunks(prompt)
+        if not chunks_response or "data" not in chunks_response:
+            st.error("Impossible de récupérer les chunks")
+            st.stop()
+
+        # Filtrer les chunks par similarité
+        filtered_chunks = filter_chunks_by_similarity(query_embedding, chunks_response["data"])
+        
+        # Construire le contexte à partir des chunks filtrés
+        context = "\n".join([chunk["text"] for chunk in filtered_chunks[:3]])  # Prendre les 3 plus pertinents
+
         # Préparation de la requête avec contexte
         messages = [
             {
@@ -230,6 +340,13 @@ if prompt := st.chat_input("Entrez votre message ici..."):
                 "content": "En tant qu'expert immobilier technique, vos réponses synthétiques s'appuient uniquement sur les dates/résolutions des PV d'AG, articles de règlements et montants votés, avec précision chiffrée (exemple type : 'Rénovation façade : 150k€ votés le 05/2023 (PV §12)'). Ne mentionne jamais ce qui n'est pas pertinent."
             }
         ]
+        
+        # Ajouter le contexte trouvé
+        if context:
+            messages.append({
+                "role": "system",
+                "content": f"Contexte pertinent :\n{context}"
+            })
         
         # Ajouter l'historique des messages
         for message in st.session_state.messages:
