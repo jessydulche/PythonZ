@@ -20,8 +20,7 @@ if not API_URL:
 
 # Configuration des timeouts et limites
 UPLOAD_TIMEOUT = 1800  # 30 minutes pour les gros fichiers
-MAX_RETRIES = 3
-CHUNK_SIZE = 512 * 1024  # 512KB chunks pour plus de stabilité
+
 
 headers = {
     "accept": "application/json",
@@ -44,20 +43,12 @@ if "upload_progress" not in st.session_state:
     st.session_state.upload_progress = {}
 
 # Fonction pour lister les documents ingérés avec pagination et recherche
-def list_ingested_documents(search_query=None, page=1, per_page=20):
+def list_ingested_documents():
     try:
         with httpx.Client(timeout=30.0) as client:
-            params = {
-                "collection": "chat_documents",
-                "page": page,
-                "per_page": per_page
-            }
-            if search_query:
-                params["search"] = search_query
-                
             response = client.get(
                 f"{API_URL}/v1/ingest/list",
-                params=params,
+                params={"collection": "chat_documents"},
                 headers={"accept": "application/json"}
             )
             response.raise_for_status()
@@ -105,6 +96,7 @@ def upload_file_with_progress(file_path, file_name, progress_bar):
             client = httpx.Client(timeout=timeout)
             
             try:
+                # Utilisation de httpx.stream pour suivre la progression de l'upload
                 with client.stream(
                     "POST",
                     f"{API_URL}/v1/ingest/file",
@@ -114,11 +106,12 @@ def upload_file_with_progress(file_path, file_name, progress_bar):
                 ) as response:
                     response.raise_for_status()
                     
-                    # Mise à jour de la barre de progression
+                    # Mise à jour de la barre de progression basée sur la réponse
                     for chunk in response.iter_bytes():
-                        uploaded_size += len(chunk)
-                        progress = min(1.0, uploaded_size / file_size)
-                        progress_bar.progress(progress)
+                        if response.status_code == 200:
+                            progress_bar.progress(1.0)  # Upload terminé avec succès
+                        else:
+                            progress_bar.progress(0.0)  # Erreur lors de l'upload
                     
                     return True
             except httpx.TimeoutException:
@@ -134,9 +127,11 @@ def upload_file_with_progress(file_path, file_name, progress_bar):
                             params=params
                         ) as retry_response:
                             retry_response.raise_for_status()
+                            progress_bar.progress(1.0)  # Upload terminé avec succès
                             return True
                 raise
     except Exception as e:
+        progress_bar.progress(0.0)  # Erreur lors de l'upload
         raise e
     finally:
         client.close()
