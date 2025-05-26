@@ -156,21 +156,13 @@ def generate_embeddings(text):
         st.error(f"Erreur lors de la génération des embeddings: {str(e)}")
         return None
 
-# Fonction pour calculer la similarité cosinus entre deux vecteurs
-def cosine_similarity(v1, v2):
-    dot_product = np.dot(v1, v2)
-    norm_v1 = np.linalg.norm(v1)
-    norm_v2 = np.linalg.norm(v2)
-    return dot_product / (norm_v1 * norm_v2)
-
 # Fonction pour filtrer les chunks par similarité
 def filter_chunks_by_similarity(query_embedding, chunks, threshold=0.7):
     filtered_chunks = []
     for chunk in chunks:
-        if "embedding" in chunk:
-            similarity = cosine_similarity(query_embedding, chunk["embedding"])
-            if similarity > threshold:
-                chunk["similarity_score"] = similarity
+        if "score" in chunk:
+            if chunk["score"] > threshold:
+                chunk["similarity_score"] = chunk["score"]
                 filtered_chunks.append(chunk)
     return sorted(filtered_chunks, key=lambda x: x["similarity_score"], reverse=True)
 
@@ -217,6 +209,20 @@ def ingest_text(text, artifact_name):
 # Sidebar pour le téléchargement des fichiers
 with st.sidebar:
     st.header("📁 Gestion des fichiers")
+    
+    # Bouton pour télécharger l'historique du chat
+    if st.session_state.messages:
+        chat_history = {
+            "messages": st.session_state.messages,
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.0"
+        }
+        st.download_button(
+            label="📥 Télécharger l'historique du chat",
+            data=json.dumps(chat_history, ensure_ascii=False, indent=2),
+            file_name=f"chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
+        )
     
     # Onglets pour choisir entre fichier et texte
     tab1, tab2 = st.tabs(["📄 Fichiers", "📝 Texte"])
@@ -337,16 +343,9 @@ if prompt := st.chat_input("Entrez votre message ici..."):
         messages = [
             {
                 "role": "system",
-                "content": "En tant qu'expert immobilier technique, vos réponses synthétiques s'appuient uniquement sur les dates/résolutions des PV d'AG, articles de règlements et montants votés, avec précision chiffrée (exemple type : 'Rénovation façade : 150k€ votés le 05/2023 (PV §12)'). Ne mentionne jamais ce qui n'est pas pertinent."
+                "content": "Vous êtes un assistant spécialisé dans la rédaction de documents administratifs. Vos réponses doivent être précises, professionnelles et basées uniquement sur les informations fournies dans le contexte. Vous devez respecter le style et le format des documents existants."
             }
         ]
-        
-        # Ajouter le contexte trouvé
-        if context:
-            messages.append({
-                "role": "system",
-                "content": f"Contexte pertinent :\n{context}"
-            })
         
         # Ajouter l'historique des messages
         for message in st.session_state.messages:
@@ -365,7 +364,7 @@ if prompt := st.chat_input("Entrez votre message ici..."):
             "stream": True,
             "include_sources": True,
             "generate_citations": True,
-            "use_default_prompt": True
+            "use_default_prompt": False  # Désactivé car nous utilisons notre propre prompt système
         }
 
         # Création d'un conteneur pour le message de l'assistant
